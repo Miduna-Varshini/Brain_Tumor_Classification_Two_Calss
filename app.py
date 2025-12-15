@@ -57,7 +57,7 @@ MODEL_PATH = "Brain_Tumor_dataset.h5"
 @st.cache_resource
 def load_brain_model():
     if not os.path.exists(MODEL_PATH):
-        st.info("⬇️ Downloading AI model from Google Drive. Please wait...")
+        
         url = f"https://drive.google.com/uc?id={MODEL_ID}"
         gdown.download(url, MODEL_PATH, quiet=False)
     return load_model(MODEL_PATH)
