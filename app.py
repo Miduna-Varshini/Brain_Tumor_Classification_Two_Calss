@@ -1,116 +1,136 @@
 import streamlit as st
-import pandas as pd
+import tensorflow as tf
+from tensorflow.keras.models import load_model
+from tensorflow.keras.preprocessing import image
 import numpy as np
-from sklearn.linear_model import LinearRegression
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import r2_score, mean_squared_error
-import matplotlib.pyplot as plt
+from PIL import Image
 
-# ================= PAGE CONFIG =================
-st.set_page_config(page_title="Salary Prediction Dashboard",
-                   page_icon="💼", layout="centered")
+# ================== PAGE CONFIG ==================
+st.set_page_config(
+    page_title="Brain Tumor Diagnosis",
+    page_icon="🧠",
+    layout="centered"
+)
 
-st.title("💼 Salary Prediction Dashboard")
-st.markdown("Predict salary based on your experience and profile using our dataset.")
+# ================== CUSTOM CSS (Hospital Style) ==================
+st.markdown("""
+<style>
+body {
+    background-color: #f5f7fa;
+}
+.main {
+    background-color: #ffffff;
+    border-radius: 15px;
+    padding: 20px;
+}
+h1 {
+    color: #0b5394;
+    font-weight: 700;
+}
+.result-box {
+    padding: 20px;
+    border-radius: 12px;
+    margin-top: 15px;
+}
+.positive {
+    background-color: #FB4549;
+    border-left: 6px solid #d9534f;
+}
+.negative {
+    background-color: #009900;
+    border-left: 6px solid #2ecc71;
+}
+.footer {
+    text-align: center;
+    color: gray;
+    font-size: 13px;
+}
+</style>
+""", unsafe_allow_html=True)
 
-# ================= ADMIN PANEL: UPLOAD DATA =================
-st.sidebar.header("⚙️ Admin Panel")
-uploaded_file = st.sidebar.file_uploader("Upload CSV to retrain model", type="csv")
+# ================== LOAD MODEL ==================
+@st.cache_resource
+def load_brain_model():
+    return load_model("Brain_Tumor_dataset.h5")
 
-if uploaded_file is not None:
-    df = pd.read_csv(uploaded_file)
-else:
-    # Default dataset path
-    df = pd.read_csv("Salary Data.csv")
+model = load_brain_model()
 
+# ================== HEADER ==================
+st.markdown("<h1 style='text-align:center;'>🧠 Brain Tumor Diagnosis System</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align:center;'>AI-assisted MRI image analysis</p>", unsafe_allow_html=True)
+st.markdown("---")
 
-st.subheader("Dataset Preview")
-st.dataframe(df.head())
+# ================== IMAGE INPUT ==================
+tab1, tab2 = st.tabs(["📁 Upload MRI Image", "📷 Capture Using Camera"])
 
-# Drop missing values
-df = df.dropna(subset=["Age","Gender","Education Level","Job Title","Years of Experience","Salary"])
+uploaded_image = None
 
-# ================= TRAIN MODEL =================
-df_encoded = pd.get_dummies(df, columns=["Gender","Education Level","Job Title"], drop_first=True)
+with tab1:
+    uploaded_image = st.file_uploader(
+        "Upload MRI Image",
+        type=["jpg", "jpeg", "png"]
+    )
 
-X = df_encoded.drop("Salary", axis=1)
-y = df_encoded["Salary"]
+with tab2:
+    uploaded_image = st.camera_input("Take MRI Photo")
 
-# Train/test split for model confidence
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-model = LinearRegression()
-model.fit(X_train, y_train)
+# ================== PREDICTION ==================
+if uploaded_image is not None:
+    img = Image.open(uploaded_image).convert("RGB")
+    st.image(img, caption="Uploaded MRI Image", use_container_width=True)
 
-# ================= MODEL CONFIDENCE =================
-y_pred_test = model.predict(X_test)
-r2 = r2_score(y_test, y_pred_test)
-rmse = np.sqrt(mean_squared_error(y_test, y_pred_test))
+    # Preprocess
+    img_resized = img.resize((224, 224))
+    img_array = image.img_to_array(img_resized)
+    img_array = np.expand_dims(img_array, axis=0) / 255.0
 
-st.sidebar.markdown("### 📊 Model Confidence")
-st.sidebar.info(f"R² Score: {r2:.2f}\nRMSE: ₹ {rmse:,.0f}")
+    # Predict
+    prediction = model.predict(img_array)[0][0]
 
-# ================= USER INPUTS =================
-st.subheader("Enter Your Details")
+    tumor_prob = float(prediction)
+    no_tumor_prob = 1 - tumor_prob
 
-age = st.selectbox("Age", sorted(df["Age"].unique()))
-gender = st.selectbox("Gender", df["Gender"].unique())
-education = st.selectbox("Education Level", df["Education Level"].unique())
-job = st.selectbox("Job Title", df["Job Title"].unique())
-experience = st.selectbox("Years of Experience", sorted(df["Years of Experience"].unique()))
+    st.markdown("## 🔬 Diagnostic Result")
 
-# ================= PREPARE USER INPUT =================
-input_dict = {"Age": age, "Years of Experience": experience}
+    # ================== RESULT BOX ==================
+    if tumor_prob >= 0.5:
+        st.markdown(
+            f"""
+            <div class="result-box positive">
+            <h3>⚠️ Brain Tumor Detected</h3>
+            <p>Immediate medical consultation is recommended.</p>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+    else:
+        st.markdown(
+            f"""
+            <div class="result-box negative">
+            <h3>✅ No Brain Tumor Detected</h3>
+            <p>No abnormal tumor patterns found.</p>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
-for col in X.columns:
-    if col.startswith("Gender_"):
-        input_dict[col] = 1 if col == f"Gender_{gender}" else 0
-    elif col.startswith("Education Level_"):
-        input_dict[col] = 1 if col == f"Education Level_{education}" else 0
-    elif col.startswith("Job Title_"):
-        input_dict[col] = 1 if col == f"Job Title_{job}" else 0
+    # ================== PROBABILITY BAR ==================
+    st.markdown("### 📊 Prediction Confidence")
 
-input_df = pd.DataFrame([input_dict])
+    st.write("**Tumor Probability**")
+    st.progress(tumor_prob)
 
-# ================= PREDICTION =================
-if st.button("📈 Predict Salary"):
-    salary = model.predict(input_df)[0]
-    st.success(f"💰 Estimated Salary: ₹ {salary:,.0f}")
-    st.info(f"Salary Range: ₹ {salary*0.9:,.0f} - ₹ {salary*1.1:,.0f}")
+    st.write("**No Tumor Probability**")
+    st.progress(no_tumor_prob)
 
-    # ================= SCENARIO ANALYSIS =================
-    st.subheader("🔮 Scenario: +2 Years Experience")
-    input_df_scenario = input_df.copy()
-    input_df_scenario["Years of Experience"] += 2
-    future_salary = model.predict(input_df_scenario)[0]
-    st.info(f"Future Salary Estimate: ₹ {future_salary:,.0f}")
+    # ================== NUMERIC VALUES ==================
+    col1, col2 = st.columns(2)
+    col1.metric("Tumor Probability", f"{tumor_prob*100:.2f}%")
+    col2.metric("No Tumor Probability", f"{no_tumor_prob*100:.2f}%")
 
-    # ================= ROLE-BASED COMPARISON =================
-    st.subheader("💡 Role-Based Salary Comparison")
-    role_avg = df.groupby("Job Title")["Salary"].mean().sort_values(ascending=False)
-    st.bar_chart(role_avg)
-
-    # ================= EXPERIENCE VS SALARY CHART =================
-    st.subheader("📊 Experience vs Salary Trend")
-    exp_salary = df.groupby("Years of Experience")["Salary"].mean()
-    fig, ax = plt.subplots()
-    ax.plot(exp_salary.index, exp_salary.values, marker='o', color='blue')
-    ax.set_xlabel("Years of Experience")
-    ax.set_ylabel("Average Salary")
-    ax.set_title("Salary Growth by Experience")
-    st.pyplot(fig)
-
-    # ================= HIRING COST ESTIMATOR =================
-    st.subheader("💼 Hiring Cost Estimator")
-    team_size = st.number_input("Enter team size", min_value=1, value=1)
-    monthly_cost = salary / 12
-    st.write(f"💵 Monthly Cost per Employee: ₹ {monthly_cost:,.0f}")
-    st.write(f"💰 Annual Cost per Employee: ₹ {salary:,.0f}")
-    st.write(f"💼 Total Annual Cost for {team_size} Employees: ₹ {salary*team_size:,.0f}")
-
-    # ================= EXPORT REPORT =================
-    st.subheader("📥 Export Prediction Report")
-    report = pd.DataFrame({
-        "Feature": ["Age", "Gender", "Education Level", "Job Title", "Years of Experience", "Predicted Salary"],
-        "Value": [age, gender, education, job, experience, salary]
-    })
-    st.download_button("⬇️ Download Report as CSV", report.to_csv(index=False), "salary_report.csv", "text/csv")
+# ================== FOOTER ==================
+st.markdown("---")
+st.markdown(
+    "<div class='footer'>⚕️ AI-assisted system | Not a substitute for professional diagnosis</div>",
+    unsafe_allow_html=True
+)
