@@ -4,6 +4,8 @@ from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing import image
 import numpy as np
 from PIL import Image
+import os
+import gdown
 
 # ================== PAGE CONFIG ==================
 st.set_page_config(
@@ -48,10 +50,17 @@ h1 {
 </style>
 """, unsafe_allow_html=True)
 
-# ================== LOAD MODEL ==================
+# ================== LOAD MODEL (FROM GOOGLE DRIVE) ==================
+MODEL_ID = "17egawO8VZD0SdkJ-mzVWF9d7GvjOIFZM"   # 🔴 REPLACE with your Google Drive file ID
+MODEL_PATH = "Brain_Tumor_dataset.h5"
+
 @st.cache_resource
 def load_brain_model():
-    return load_model("Brain_Tumor_dataset.h5")
+    if not os.path.exists(MODEL_PATH):
+        st.info("⬇️ Downloading AI model from Google Drive. Please wait...")
+        url = f"https://drive.google.com/uc?id={MODEL_ID}"
+        gdown.download(url, MODEL_PATH, quiet=False)
+    return load_model(MODEL_PATH)
 
 model = load_brain_model()
 
@@ -95,7 +104,7 @@ if uploaded_image is not None:
     # ================== RESULT BOX ==================
     if tumor_prob >= 0.5:
         st.markdown(
-            f"""
+            """
             <div class="result-box positive">
             <h3>⚠️ Brain Tumor Detected</h3>
             <p>Immediate medical consultation is recommended.</p>
@@ -105,7 +114,7 @@ if uploaded_image is not None:
         )
     else:
         st.markdown(
-            f"""
+            """
             <div class="result-box negative">
             <h3>✅ No Brain Tumor Detected</h3>
             <p>No abnormal tumor patterns found.</p>
